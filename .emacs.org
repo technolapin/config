@@ -1,0 +1,416 @@
+#+begin_src elisp :noweb yes
+  (message "Loading emacs config ...")
+  <<ORG_CAPTURE>>
+  (message "Finished loading emacs config .")
+#+end_src
+
+#+RESULTS:
+: Fichier C
+
+* System control utilities
+
+#+begin_src elisp :tangle no :noweb-ref ORG_CAPTURE
+  (setq sys-xrandr-brightness 1.0)
+  (setq sys-xrandr-gamma 1.0)
+  (defun sys-backlight-get () (string-to-number (shell-command-to-string "xbacklight -get")))
+  (defun sys-backlight-delta () (/ (sys-backlight-get) 10))
+  (defun sys-backlight-set (n) (shell-command (concat "xbacklight -set " (number-to-string (min (max 0 n) 100)))))
+  (defun sys-backlight-inc (n) (sys-backlight-set (+ (sys-backlight-get) n)))
+  (defun sys-backlight-log-inc (n) (message (number-to-string (sys-backlight-get))) (sys-backlight-inc (* n (+ 1 (/ (sys-backlight-get) 20)))))
+
+  (defun sys-xrandr-brightness-update () (shell-command (concat "xrandr --output eDP-1 --brightness " (number-to-string sys-xrandr-brightness))))
+  (defun sys-xrandr-gamma-update     () (shell-command (concat "xrandr --output eDP-1 --gamma " (number-to-string sys-xrandr-gamma))))
+  (defun sys-xrandr-brightness-set (level) (setq sys-xrandr-brightness level)  (message (concat "brightness: " (number-to-string sys-xrandr-brightness))) (sys-xrandr-brightness-update))
+  (defun sys-xrandr-gamma-set (level) (setq sys-xrandr-gamma (max 0 level)) (message (concat "gamma: " (number-to-string sys-xrandr-gamma))) (sys-xrandr-gamma-update))
+
+  (defun sys-xrandr-brightness-inc (n) (sys-xrandr-brightness-set (+ sys-xrandr-brightness  n)))
+  (defun sys-xrandr-brightness-dec (n) (sys-xrandr-brightness-set (+ sys-xrandr-brightness -n)))
+  (defun sys-xrandr-gamma-inc (n) (sys-xrandr-gamma-set (+ sys-xrandr-gamma  n)))
+  (defun sys-xrandr-gamma-dec (n) (sys-xrandr-gamma-set (+ sys-xrandr-gamma -n)))
+
+  (defun sys-audio-volume-dec () (shell-command "pactl set-sink-volume @DEFAULT_SINK@ -5%"))
+  (defun sys-audio-volume-inc () (shell-command "pactl set-sink-volume @DEFAULT_SINK@ +5%"))
+  (defun sys-audio-volume-mute-toggle () (shell-command "pactl set-sink-mute @DEFAULT_SINK@ toggle"))
+  (defun sys-audio-mic-mute-toggle () (shell-command "pactl set-source-mute @DEFAULT_SOURCE@ toggle"))
+
+#+end_src
+
+#+RESULTS:
+: sys-audio-mic-mute-toggle
+
+
+
+
+
+
+* EXWM thingies
+#+begin_src elisp :tangle no :noweb-ref ORG_CAPTURE
+
+      (custom-set-variables
+       ;; custom-set-variables was added by Custom.
+       ;; If you edit it by hand, you could mess it up, so be careful.
+       ;; Your init file should contain only one such instance.
+       ;; If there is more than one, they won't work right.
+       '(custom-enabled-themes '(solarized-dark-high-contrast))
+       '(custom-safe-themes
+	 '("51ec7bfa54adf5fff5d466248ea6431097f5a18224788d0bd7eb1257a4f7b773" "3e200d49451ec4b8baa068c989e7fba2a97646091fd555eca0ee5a1386d56077" "524fa911b70d6b94d71585c9f0c5966fe85fb3a9ddd635362bfabd1a7981a307" "285d1bf306091644fb49993341e0ad8bafe57130d9981b680c1dbd974475c5c7" "830877f4aab227556548dc0a28bf395d0abe0e3a0ab95455731c9ea5ab5fe4e1" "57a29645c35ae5ce1660d5987d3da5869b048477a7801ce7ab57bfb25ce12d3e" "efcecf09905ff85a7c80025551c657299a4d18c5fcfedd3b2f2b6287e4edd659" "d89e15a34261019eec9072575d8a924185c27d3da64899905f8548cbd9491a36" "833ddce3314a4e28411edf3c6efde468f6f2616fc31e17a62587d6a9255f4633" "7f1d414afda803f3244c6fb4c2c64bea44dac040ed3731ec9d75275b9e831fe5" "fee7287586b17efbfda432f05539b58e86e059e78006ce9237b8732fde991b4c" default))
+       '(package-selected-packages '(tramp org solarized-theme exwm)))
+      (custom-set-faces
+       ;; custom-set-faces was added by Custom.
+       ;; If you edit it by hand, you could mess it up, so be careful.
+       ;; Your init file should contain only one such instance.
+       ;; If there is more than one, they won't work right.
+       )
+
+      (require 'exwm)
+      (require 'exwm-config)
+      (require 'exwm-systemtray)
+
+
+      ;; Enlève des warnings à la con
+    ;  (setq warning-suppress-types "(emacs): Key unavailable:") 
+
+      (defun async-shell-command-no-window
+	  (command)
+	(interactive)
+	(let
+	    ((display-buffer-alist
+	      (list
+	       (cons
+		"\\*Async Shell Command\\*.*"
+		(cons #'display-buffer-no-window nil)))))
+	   (start-process-shell-command command nil command)))
+
+
+      (defun my-exwm-config ()
+	"Default configuration of EXWM."
+	;; Set the initial workspace number.
+	(unless (get 'exwm-workspace-number 'saved-value)
+	  (setq exwm-workspace-number 1))
+
+	;; Make class name the buffer name
+	(add-hook 'exwm-update-class-hook
+		  (lambda ()
+		    (exwm-workspace-rename-buffer exwm-class-name)))
+	;; Global keybindings.
+	(unless (get 'exwm-input-global-keys 'saved-value)
+	  (setq exwm-input-global-keys
+		`(
+		  ([XF86MonBrightnessDown] .  (lambda () (interactive) (sys-backlight-log-inc -1)))
+		  ([XF86MonBrightnessUp]   .  (lambda () (interactive) (sys-backlight-log-inc  1)))
+
+		  ([C-XF86MonBrightnessDown] .  (lambda () (interactive) (sys-xrandr-brightness-inc -0.1)))
+		  ([C-XF86MonBrightnessUp]   .  (lambda () (interactive) (sys-xrandr-brightness-inc  0.1)))
+		  ([s-XF86MonBrightnessDown] .  (lambda () (interactive) (sys-xrandr-gamma-inc -0.1)))
+		  ([s-XF86MonBrightnessUp]   .  (lambda () (interactive) (sys-xrandr-gamma-inc  0.1)))
+
+		  ([XF86AudioLowerVolume] .  (lambda () (interactive) (sys-audio-volume-dec)))
+		  ([XF86AudioRaiseVolume] .  (lambda () (interactive) (sys-audio-volume-inc)))
+		  ([XF86AudioMute] .  (lambda () (interactive) (sys-audio-volume-mute-toggle)))
+		  ([XF86AudioMicMute] .  (lambda () (interactive) (sys-audio-mic-mute-toggle)))
+		  ([f12] . (lambda () (interactive) (shell-command "~/Codatatation/i3lock-fancy/i3lock-custom")))
+		  ([s-left] . shrink-window-horizontally)
+		  ([s-right] . enlarge-window-horizontally)
+		  ([s-down] . shrink-window)
+
+		  ([s-S-up]    . buf-move-up)
+		  ([s-S-left]  . buf-move-left)
+		  ([s-S-right] . buf-move-right)
+		  ([s-S-down]  . buf-move-down)
+
+		  ([s-up] . enlarge-window)
+		  ([s-return] . (lambda () (interactive) (start-process "terminator" nil "terminator")))
+		  ;; 's-r': Reset (to line-mode).
+		  ([?\s-r] . exwm-reset)
+		  ([?\s-a] . exwm-floating-toggle-floating)
+		  ;; 's-w': Switch workspace.
+		  ([?\s-w] . exwm-workspace-switch)
+		  ;; 's-&': Launch application.
+		  ([?\s-&] . (lambda (command)
+			       (interactive (list (read-shell-command "$ ")))
+			       (start-process command nil command)))
+		  ;; 's-N': Switch to certain workspace.
+
+		  ;; fait des warning en mode ça marche pas, mais en pratique ça marche très bien
+		  ([?\s-&] . (lambda () (interactive) (exwm-workspace-switch-create 1)))
+		  ([?\s-é] . (lambda () (interactive) (exwm-workspace-switch-create 2)))
+		  ([?\s-\"] . (lambda () (interactive) (exwm-workspace-switch-create 3)))
+		  ([?\s-\'] . (lambda () (interactive) (exwm-workspace-switch-create 4)))
+		  ([?\s-\(] . (lambda () (interactive) (exwm-workspace-switch-create 5)))
+		  ([?\s-\-] . (lambda () (interactive) (exwm-workspace-switch-create 6)))
+		  ([?\s-è] . (lambda () (interactive) (exwm-workspace-switch-create 7)))
+		  ([?\s-_] . (lambda () (interactive) (exwm-workspace-switch-create 8)))
+		  ([?\s-ç] . (lambda () (interactive) (exwm-workspace-switch-create 9)))
+		  ([?\s-à] . (lambda () (interactive) (exwm-workspace-switch-create 0)))
+		  )))
+	;; Line-editing shortcuts
+	(unless (get 'exwm-input-simulation-keys 'saved-value)
+	  (setq exwm-input-simulation-keys
+		'(([?\C-b] . [left])
+		  ([?\C-f] . [right])
+		  ([?\C-p] . [up])
+		  ([?\C-n] . [down])
+		  ([?\C-a] . [home])
+		  ([?\C-e] . [end])
+		  ([?\M-v] . [prior])
+		  ([?\C-v] . [next])
+		  ([?\C-d] . [delete])
+		  ([?\C-k] . [S-end delete]))))
+
+	(exwm-systemtray-enable)
+	;; Enable EXWM
+	(exwm-enable)
+	;; Configure Ido
+;	(exwm-config-ido)
+	;; Other configurations
+	(exwm-config-misc))
+
+
+      (my-exwm-config)
+
+
+      ;; (setq exwm-manage-configurations 
+      ;;    '(((member exwm-class-name '("Emacs" "Terminator" "Firefox"))
+      ;; 	   char-mode t)))
+
+
+      (setq exwm-manage-configurations  '((t char-mode t)))
+
+
+  (setq async-shell-command-buffer 'new-buffer)
+  (setq async-shell-command-display-buffer nil)
+
+
+#+end_src
+
+#+RESULTS:
+
+
+* TODO tramp
+
+Fucking tramp again
+** TODO Emacs 29.1 bug mitigation
+TODO: virer l'accès réseau et juste mettre le bout de code ici
+#+begin_src elisp :tangle no :noweb-ref ORG_CAPTURE
+
+     (when (string-equal emacs-version "29.1")
+       (with-current-buffer
+           (url-retrieve-synchronously
+            "https://git.savannah.gnu.org/cgit/emacs.git/plain/lisp/emacs-lisp/loaddefs-gen.el?h=emacs-29")
+         (goto-char (point-min))
+         (while (looking-at "^.+$") (forward-line))
+         (eval-region (point) (point-max))))
+#+end_src
+
+* TODO Welcome buffer
+Pour tester (ça marche)
+
+Ça serait bien d'avoir accès facilement aux mails (genre le nb de mails reçus avec un filtre précis pour compter que les mails pertinnents)
++ du rss éventuellement (mais osef)
++ un terminal ouvetr
++ un fond d'écran
++ un pixel art stylax
+une DA quoi
+
+#+begin_src elisp :tangle no :noweb-ref ORG_CAPTURE
+(require 'dashboard)
+(dashboard-setup-startup-hook)
+(setq initial-buffer-choice (lambda () (get-buffer-create "*dashboard*")))
+#+end_src
+* Melpa
+
+Because I love risks
+
+#+begin_src elisp :tangle no :noweb-ref ORG_CAPTURE
+  (require 'package)
+  (add-to-list 'package-archives '("melpa" . "https://melpa.org/packages/") t)
+  ;; Comment/uncomment this line to enable MELPA Stable if desired.  See `package-archive-priorities`
+  ;; and `package-pinned-packages`. Most users will not need or want to do this.
+  ;;(add-to-list 'package-archives '("melpa-stable" . "https://stable.melpa.org/packages/") t)
+  (package-initialize)
+
+;; Set the title
+(setq dashboard-banner-logo-title "Euh oui le Pécé")
+;; Set the banner
+(setq dashboard-startup-banner "~/Images/mojus.png")
+;; Value can be
+;; - nil to display no banner
+;; - 'official which displays the official emacs logo
+;; - 'logo which displays an alternative emacs logo
+;; - 1, 2 or 3 which displays one of the text banners
+;; - "path/to/your/image.gif", "path/to/your/image.png", "path/to/your/text.txt" or "path/to/your/image.xbm" which displays whatever gif/image/text/xbm you would prefer
+;; - a cons of '("path/to/your/image.png" . "path/to/your/text.txt")
+
+;; Content is not centered by default. To center, set
+(setq dashboard-center-content t)
+
+;; To disable shortcut "jump" indicators for each section, set
+(setq dashboard-show-shortcuts nil)
+  
+  (setq dashboard-items '((recents  . 5)
+			  (bookmarks . 5)
+			  (projects . 5)
+			  (agenda . 5)
+			  (registers . 5)))
+
+#+end_src
+
+#+RESULTS
+:
+* ORG babel
+
+Syntaxe: (langage . peut être évalué)
+#+begin_src elisp :tangle no :noweb-ref ORG_CAPTURE
+  (setq org-confirm-babel-evaluate nil)
+  (org-babel-do-load-languages
+   'org-babel-load-languages
+   '(
+     (emacs-lisp . t) ;; duh
+     (C . t) ;; also adds C++ and D
+     (cmake . nil) ;; syntax color supported because we have cmake-mode
+     (shell . t) 
+     )
+   )
+#+end_src
+
+* Picom and frames parameters
+
+#+begin_src elisp :tangle no :noweb-ref ORG_CAPTURE
+  (add-to-list 'default-frame-alist '(alpha  . 90))
+  ;;(set-frame-parameter nil 'alpha 85)
+  (shell-command "picom -b")
+  (shell-command "nitrogen --set-zoom-fill ~/Images/illust_17822999_20230526_011610.jpg")
+#+end_src
+
+#+RESULTS:
+
+#+RESULTS
+:
+* Task bar stuff
+#+begin_src elisp :tangle no :noweb-ref ORG_CAPTURE
+  (message "Task bar stuff ...")
+  (defface face-for-display-time
+    '((((type x w32 mac))
+       ;; #060525 is the background colour of my default face.
+       (:foreground "#b58900" :inherit bold))
+      (((type tty))
+       (:foreground "blue")))
+    "Face used to display the time in the mode line.")
+
+  ;; (setq display-time-format "%Y-%M-%d %T:%M:%S")
+
+  ;; (setq display-time-string-forms
+  ;; 	 '((propertize (concat " " 24-hours ":" minutes " ")
+  ;; 		      'face 'face-for-display-time)))
+  (setq display-time-string-forms '((propertize (format-time-string "%Y-%M-%d %T" now) 'face 'face-for-display-time)))
+
+  (display-time-mode)
+  (display-battery-mode)
+
+  #+end_src
+
+#+RESULTS:
+| propertize | (format-time-string %Y-%M-%d %T:%M:%S now) | 'face | 'face-for-display-time |
+
+#+RESULT:S
+: %Y-%M-%d %T:%M:%S
+
+
+
+
+* Workspaces thingy
+#+begin_src elisp 
+
+  ;;   (easy-menu-define exwm-workspace-menu nil
+  ;;     "Menu for Exwm Workspace.
+
+  ;;   Also used in `exwm-mode-line-workspace-map'."
+  ;;     '("Exwm Workspace"
+  ;;       ["Add workspace" exwm-workspace-add]
+  ;;       ["Delete current workspace" exwm-workspace-delete]
+  ;;       ["Move workspace to" exwm-workspace-move]
+  ;;       ["Swap workspaces" exwm-workspace-swap]
+  ;;       ["Move X window to" exwm-workspace-move-window]
+  ;;       ["Move X window from" exwm-workspace-switch-to-buffer]
+  ;;       ["Toggle minibuffer" exwm-workspace-toggle-minibuffer]
+  ;;       ["Switch workspace" exwm-workspace-switch]
+  ;;       ;; Place this entry at bottom to avoid selecting others by accident.
+  ;;       ("Switch to" :filter
+  ;;        (lambda (&rest _args)
+  ;; 	 (mapcar (lambda (i)
+  ;; 		   `[,(format "workspace %d" i)
+  ;; 		     (lambda ()
+  ;; 		       (interactive)
+  ;; 		       (exwm-workspace-switch ,i))
+  ;; 		     (/= ,i exwm-workspace-current-index)])
+  ;; 		 (number-sequence 0 (1- (exwm-workspace--count))))))))
+
+  ;;   (defvar exwm-mode-line-workspace-map
+  ;;     (let ((map (make-sparse-keymap)))
+  ;;       (define-key map [mode-line mouse-1] 'exwm-workspace-switch)
+  ;;       (define-key map [mode-line mouse-3] exwm-workspace-menu)
+  ;;       map)
+  ;;     "Local keymap for EXWM mode line string.  See `exwm-mode-line-format'.")
+
+
+  ;;   (defcustom exwm-mode-line-format
+  ;;   `("["
+  ;;     (:propertize (:eval (elt exwm-workspace--switch-history exwm-workspace-current-index))
+  ;; 		 local-map ,exwm-mode-line-workspace-map
+  ;; 		 face bold
+  ;; 		 mouse-face mode-line-highlight
+  ;; 		 help-echo "mouse-1: Switch to / add / delete to EXWM workspaces.
+  ;; mouse-2: EXWM Workspace menu.
+  ;; ")
+  ;;     "]")
+  ;;   "EXWM workspace in the mode line."
+  ;;   :type 'sexp)
+
+
+  ;;   ;; FIXME: Don't push the value.  Instead push a symbol.  If done, (1)
+  ;;   ;; this will avoid duplicate entries for EXWM workspace (2) The mode
+  ;;   ;; line string will change in sync with the value of
+  ;;   ;; `exwm-mode-line-format'.
+  ;;   (add-to-list 'mode-line-misc-info exwm-mode-line-format t) 
+#+end_src
+
+#+RESULTS:
+| global-mode-string | ( global-mode-string)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| [                  | (:propertize (:eval (elt exwm-workspace--switch-history exwm-workspace-current-index)) local-map (keymap (mode-line keymap (mouse-3 keymap Exwm Workspace (Add workspace menu-item Add workspace exwm-workspace-add) (Delete current workspace menu-item Delete current workspace exwm-workspace-delete) (Move workspace to menu-item Move workspace to exwm-workspace-move) (Swap workspaces menu-item Swap workspaces exwm-workspace-swap) (Move X window to menu-item Move X window to exwm-workspace-move-window) (Move X window from menu-item Move X window from exwm-workspace-switch-to-buffer) (Toggle minibuffer menu-item Toggle minibuffer exwm-workspace-toggle-minibuffer) (Switch workspace menu-item Switch workspace exwm-workspace-switch) (Switch to menu-item Switch to nil :filter #[257 \302\300!\301"\207 [(lambda (&rest _args) (mapcar (lambda (i) `[,(format workspace %d i) (lambda nil (interactive) (exwm-workspace-switch ,i)) (/= ,i exwm-workspace-current-index)]) (number-sequence 0 (1- (exwm-workspace--count))))) Switch to easy-menu-filter-return] 4 |
+
+
+
+
+
+
+
+
+
+#+begin_src emacs-lisp
+
+    ;    (elt exwm-workspace--switch-history exwm-workspace-current-index)
+
+  ;;    exwm-mode-line-format
+
+
+
+  ;;   ("[" (:propertize (:eval (elt exwm-workspace--switch-history exwm-workspace-current-index)) local-map (keymap (mode-line keymap ... ...)) face bold mouse-face mode-line-highlight help-echo "mouse-1: Switch to / add / delete to EXWM workspaces.
+  ;; mouse-2: EXWM Workspace menu.
+  ;; ") "]")
+
+#+end_src
+
+#+RESULTS:
+* Latex stuff
+
+
+#+begin_src elisp :tangle no :noweb-ref ORG_CAPTURE
+(setq org-latex-pdf-process
+'("pdflatex -shell-escape -interaction nonstopmode -output-directory %o %f"
+"biber %b"
+"pdflatex -shell-escape -interaction nonstopmode -output-directory %o %f"
+"pdflatex -shell-escape -interaction nonstopmode -output-directory %o %f"))
+#+end_src
+
+  #+RESULTS:
+  | pdflatex -interaction nonstopmode -output-directory %o %f | biber %b | pdflatex -interaction nonstopmode -output-directory %o %f | pdflatex -interaction nonstopmode -output-directory %o %f |
